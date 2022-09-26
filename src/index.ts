@@ -120,7 +120,7 @@ const main = async () => {
             "type": "section",
             "text": {
               "type": "plain_text",
-              "text": "Running, please wait...",
+              "text": `'${joyToWord(first(playerInputs))}' button queued, please wait...`,
               "emoji": true
             }
           }
@@ -131,7 +131,7 @@ const main = async () => {
         fs.writeFileSync(path.resolve('data', id, 'state.sav'), newState);
 
         await say({
-          text: `<@${body.user.name}> pressed ${joyToWord(first(playerInputs))}${parseInt(multiplier) > 1 ? ' x' + multiplier : ''}`,
+          text: `<@${body.user.name}> pressed '${joyToWord(first(playerInputs))}'${parseInt(multiplier) > 1 ? ' x' + multiplier : ''}.`,
         });
 
         await client.files.upload({
