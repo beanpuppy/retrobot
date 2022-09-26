@@ -6,6 +6,6 @@ services:
     build: .
     restart: unless-stopped
     environment:
-        SLACK_BOT_TOKEN=
-        SLACK_SIGNING_SECRET=
-        SLACK_APP_TOKEN=
+      - SLACK_BOT_TOKEN=
+      - SLACK_SIGNING_SECRET=
+      - SLACK_APP_TOKEN=
