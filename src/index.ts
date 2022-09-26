@@ -110,11 +110,21 @@ const main = async () => {
       const playerInputs = range(0, parseInt(multiplier)).map(() => parseInput(button));
 
       if (playerInputs.length > 0) {
-
         const info = JSON.parse(fs.readFileSync(path.resolve('data', id, 'info.json')).toString());
 
         let game = fs.readFileSync(path.resolve('data', id, info.game))
         let oldState = fs.readFileSync(path.resolve('data', id, 'state.sav'));
+
+        const { ts: newTs } = await client.chat.update({ channel, ts, text: "Running, please wait...", blocks: [
+          {
+            "type": "section",
+            "text": {
+              "type": "plain_text",
+              "text": "Running, please wait...",
+              "emoji": true
+            }
+          }
+        ]});
 
         const { recording, state: newState } = await emulate(pool, info.coreType, game, oldState, playerInputs);
 
@@ -134,7 +144,7 @@ const main = async () => {
           blocks: buttons(info.coreType, id, 1),
         });
 
-        await client.chat.delete({ channel, ts });
+        await client.chat.delete({ channel, ts: newTs });
       }
     }
   });
