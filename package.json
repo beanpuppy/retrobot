@@ -1,8 +1,8 @@
 {
-  "name": "libretro-webassembly-simple",
+  "name": "retrobot",
   "version": "1.0.0",
-  "main": "index.js",
-  "author": "Ross Squires <ross.squires@gmail.com>",
+  "main": "src/index.js",
+  "author": "Justin Duch <justin@duch.me>",
   "license": "MIT",
   "scripts": {
     "start": "ts-node src/index.ts",
