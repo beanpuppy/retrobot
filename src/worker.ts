@@ -25,20 +25,20 @@ export const RETRO_DEVICE_ID_JOYPAD_MASK = 256;
 type Core = any
 
 export interface Frame {
-    buffer: Uint16Array
-    width: number
-    height: number
-    pitch: number
+  buffer: Uint16Array
+  width: number
+  height: number
+  pitch: number
 }
 
 export interface WorkerData {
-    input: InputState
-    duration: number
-    coreType: CoreType
-    game: Buffer
-    state: Buffer
-    gameHash?: string
-    stateHash?: string
+  input: InputState
+  duration: number
+  coreType: CoreType
+  game: Buffer
+  state: Buffer
+  gameHash?: string
+  stateHash?: string
 }
 
 const NesCore = require('../cores/quicknes_libretro');
@@ -54,24 +54,24 @@ let lastNesStateHash = '';
 let lastSnesStateHash = '';
 
 const setup = (core: Core) => {
-    core.retro_set_environment((cmd: number, data: any) => {
-        if (cmd == 3) {
-            core.HEAPU8[data] = 1;
-            return true;
-        }
+  core.retro_set_environment((cmd: number, data: any) => {
+    if (cmd == 3) {
+      core.HEAPU8[data] = 1;
+      return true;
+    }
 
-        if (cmd == (51 | 0x10000)) {
-            return true;
-        }
+    if (cmd == (51 | 0x10000)) {
+      return true;
+    }
 
-        if (cmd == 10) {
-            return true;
-        }
+    if (cmd == 10) {
+      return true;
+    }
 
-        return false;
-    });
+    return false;
+  });
 
-    return core;
+  return core;
 };
 
 let nesCoreInit: Promise<Core>;
@@ -79,199 +79,199 @@ let snesCoreInit: Promise<Core>;
 let gbCoreInit: Promise<Core>;
 
 export default async (data: WorkerData) => {
-    const { coreType, input, duration, game, state, gameHash, stateHash } = data;
+  const { coreType, input, duration, game, state, gameHash, stateHash } = data;
 
-    let core: Core;
+  let core: Core;
+  switch (coreType) {
+    case CoreType.NES:
+      core = await (nesCoreInit = nesCoreInit || NesCore().then(setup));
+      break;
+
+    case CoreType.SNES:
+      core = await (snesCoreInit = snesCoreInit || SnesCore().then(setup));
+      break;
+
+    case CoreType.GBA:
+    case CoreType.GB:
+      core = await (gbCoreInit = gbCoreInit || GbCore().then(setup));
+      break;
+
+    default:
+    throw new Error(`Unknown core type: ${coreType}`);
+  }
+
+  const incomingGameHash = gameHash
+    ? gameHash
+    : await crc32(game);
+
+  let lastGameHash = '';
+
+  switch (coreType) {
+    case CoreType.NES:
+      lastGameHash = lastNesGameHash;
+      break;
+
+    case CoreType.SNES:
+      lastGameHash = lastSnesGameHash;
+      break;
+
+    case CoreType.GBA:
+    case CoreType.GB:
+      lastGameHash = lastGbGameHash;
+      break;
+  }
+
+  if (incomingGameHash != lastGameHash || state?.byteLength == 0) {
+    loadRom(core, game);
+
     switch (coreType) {
-        case CoreType.NES:
-            core = await (nesCoreInit = nesCoreInit || NesCore().then(setup));
-            break;
+      case CoreType.NES:
+        lastNesGameHash = incomingGameHash;
+        break;
 
-        case CoreType.SNES:
-            core = await (snesCoreInit = snesCoreInit || SnesCore().then(setup));
-            break;
+      case CoreType.SNES:
+        lastSnesGameHash = incomingGameHash;
+        break;
 
-        case CoreType.GBA:
-        case CoreType.GB:
-            core = await (gbCoreInit = gbCoreInit || GbCore().then(setup));
-            break;
-
-        default:
-            throw new Error(`Unknown core type: ${coreType}`);
+      case CoreType.GBA:
+      case CoreType.GB:
+        lastGbGameHash = incomingGameHash;
+        break;
     }
+  }
 
-    const incomingGameHash = gameHash
-        ? gameHash
-        : await crc32(game);
+  const av_info: any = {};
+  core.retro_get_system_av_info(av_info);
 
-    let lastGameHash = '';
+{
+    const incomingStateHash = stateHash
+      ? stateHash
+      : await crc32(state);
 
+    let lastStateHash: string;
     switch (coreType) {
-        case CoreType.NES:
-            lastGameHash = lastNesGameHash;
-            break;
+      case CoreType.NES:
+        lastStateHash = lastNesStateHash;
+        break;
 
-        case CoreType.SNES:
-            lastGameHash = lastSnesGameHash;
-            break;
+      case CoreType.SNES:
+        lastStateHash = lastSnesStateHash;
+        break;
 
-        case CoreType.GBA:
-        case CoreType.GB:
-            lastGameHash = lastGbGameHash;
-            break;
+      case CoreType.GBA:
+      case CoreType.GB:
+        lastStateHash = lastGbStateHash;
+        break;
     }
 
-    if (incomingGameHash != lastGameHash || state?.byteLength == 0) {
-        loadRom(core, game);
-
-        switch (coreType) {
-            case CoreType.NES:
-                lastNesGameHash = incomingGameHash;
-                break;
-
-            case CoreType.SNES:
-                lastSnesGameHash = incomingGameHash;
-                break;
-
-            case CoreType.GBA:
-            case CoreType.GB:
-                lastGbGameHash = incomingGameHash;
-                break;
-        }
+    if (state?.byteLength > 0 && lastStateHash != incomingStateHash) {
+      loadState(core, state);
     }
+  }
 
-    const av_info: any = {};
-    core.retro_get_system_av_info(av_info);
+  const executeFrame = () => new Promise<Frame>((res) => {
+    core.retro_set_input_state((port: number, device: number, index: number, id: number) => {
+      if (id == RETRO_DEVICE_ID_JOYPAD_MASK) {
+        let mask = 0;
 
-    {
-        const incomingStateHash = stateHash
-            ? stateHash
-            : await crc32(state);
+        if (input.A)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_A;
 
-        let lastStateHash: string;
-        switch (coreType) {
-            case CoreType.NES:
-                lastStateHash = lastNesStateHash;
-                break;
+        if (input.B)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_B;
 
-            case CoreType.SNES:
-                lastStateHash = lastSnesStateHash;
-                break;
+        if (input.X)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_X;
 
-            case CoreType.GBA:
-            case CoreType.GB:
-                lastStateHash = lastGbStateHash;
-                break;
-        }
+        if (input.Y)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_Y;
 
-        if (state?.byteLength > 0 && lastStateHash != incomingStateHash) {
-            loadState(core, state);
-        }
-    }
+        if (input.SELECT)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_SELECT;
 
-    const executeFrame = () => new Promise<Frame>((res) => {
-        core.retro_set_input_state((port: number, device: number, index: number, id: number) => {
-            if (id == RETRO_DEVICE_ID_JOYPAD_MASK) {
-                let mask = 0;
+        if (input.START)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_START;
 
-                if (input.A)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_A;
+        if (input.UP)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_UP;
 
-                if (input.B)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_B;
+        if (input.DOWN)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_DOWN;
 
-                if (input.X)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_X;
+        if (input.LEFT)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_LEFT;
 
-                if (input.Y)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_Y;
+        if (input.RIGHT)
+        mask |= 1 << RETRO_DEVICE_ID_JOYPAD_RIGHT;
 
-                if (input.SELECT)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_SELECT;
+        return mask;
+      }
 
-                if (input.START)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_START;
-
-                if (input.UP)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_UP;
-
-                if (input.DOWN)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_DOWN;
-
-                if (input.LEFT)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_LEFT;
-
-                if (input.RIGHT)
-                    mask |= 1 << RETRO_DEVICE_ID_JOYPAD_RIGHT;
-
-                return mask;
-            }
-
-            return 0;
-        });
-
-        core.retro_set_video_refresh((data: number, width: number, height: number, pitch: number) => {
-            res({
-                buffer: data
-                    ? new Uint16Array(core.HEAPU16.subarray(data / 2, (data + pitch * height) / 2))
-                    : null,
-                width,
-                height,
-                pitch
-            })
-        });
-
-        core.retro_run();
+      return 0;
     });
 
-    const frames: Frame[] = [];
+    core.retro_set_video_refresh((data: number, width: number, height: number, pitch: number) => {
+      res({
+        buffer: data
+          ? new Uint16Array(core.HEAPU16.subarray(data / 2, (data + pitch * height) / 2))
+          : null,
+        width,
+        height,
+        pitch
+      })
+    });
 
-    for (let i = 0; i < duration; i++) {
-        frames.push(await executeFrame());
-    }
+    core.retro_run();
+  });
 
-    const newState = saveState(core);
-    const newStateHash = await crc32(newState);
+  const frames: Frame[] = [];
 
-    switch (coreType) {
-        case CoreType.NES:
-            lastNesStateHash = newStateHash;
-            break;
+  for (let i = 0; i < duration; i++) {
+    frames.push(await executeFrame());
+  }
 
-        case CoreType.SNES:
-            lastSnesStateHash = newStateHash;
-            break;
+  const newState = saveState(core);
+  const newStateHash = await crc32(newState);
 
-        case CoreType.GBA:
-        case CoreType.GB:
-            lastGbStateHash = newStateHash;
-            break;
-    }
+  switch (coreType) {
+    case CoreType.NES:
+      lastNesStateHash = newStateHash;
+      break;
 
-    const output = {
+    case CoreType.SNES:
+      lastSnesStateHash = newStateHash;
+      break;
+
+    case CoreType.GBA:
+    case CoreType.GB:
+      lastGbStateHash = newStateHash;
+      break;
+  }
+
+  const output = {
+    av_info,
+    frames,
+    state: newState,
+    gameHash: incomingGameHash,
+    stateHash: newStateHash,
+
+    get [Piscina.transferableSymbol]() {
+      return [
+        newState.buffer,
+        ...frames.map(frame => frame.buffer.buffer)
+      ];
+    },
+
+    get [Piscina.valueSymbol]() {
+      return {
         av_info,
         frames,
         state: newState,
         gameHash: incomingGameHash,
-        stateHash: newStateHash,
+        stateHash: newStateHash
+      };
+    }
+  };
 
-        get [Piscina.transferableSymbol]() {
-            return [
-                newState.buffer,
-                ...frames.map(frame => frame.buffer.buffer)
-            ];
-        },
-
-        get [Piscina.valueSymbol]() {
-            return {
-                av_info,
-                frames,
-                state: newState,
-                gameHash: incomingGameHash,
-                stateHash: newStateHash
-            };
-        }
-    };
-
-    return Piscina.move(output as any);
+  return Piscina.move(output as any);
 }

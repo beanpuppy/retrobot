@@ -12,3 +12,4 @@ frames.txt
 data
 forever
 docker-compose.yml
+.DS_STORE
